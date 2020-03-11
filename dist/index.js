@@ -6241,7 +6241,7 @@ async function processPR(client, prNumber, existingLabels, labelGlobs, notFoundL
         for (const [label, globs] of labelGlobs.entries()) {
             console.log(`processing ${label}`);
             if (existingLabels.has(label)) {
-                console.log(`pr #{prNumber} is already labeled "${label}"`);
+                console.log(`pr #${prNumber} is already labeled "${label}"`);
                 continue;
             }
             if (checkGlobs(changedFiles, globs)) {
@@ -6331,7 +6331,7 @@ function checkGlobs(changedFiles, globs) {
     return false;
 }
 async function addLabels(client, prNumber, labels) {
-    console.log(`adding labels to pr #{prNumber}: ${labels
+    console.log(`adding labels to pr #${prNumber}: ${labels
         .map(l => '"' + l + '"')
         .join(", ")}`);
     await client.issues.addLabels({

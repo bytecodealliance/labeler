@@ -100,7 +100,7 @@ async function processPR(
     for (const [label, globs] of labelGlobs.entries()) {
       console.log(`processing ${label}`);
       if (existingLabels.has(label)) {
-        console.log(`pr #{prNumber} is already labeled "${label}"`);
+        console.log(`pr #${prNumber} is already labeled "${label}"`);
         continue;
       }
       if (checkGlobs(changedFiles, globs)) {
@@ -225,7 +225,7 @@ async function addLabels(
   labels: string[]
 ) {
   console.log(
-    `adding labels to pr #{prNumber}: ${labels
+    `adding labels to pr #${prNumber}: ${labels
       .map(l => '"' + l + '"')
       .join(", ")}`
   );
