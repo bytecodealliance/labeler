@@ -74,8 +74,7 @@ async function run(): Promise<void> {
       }
     }
   } catch (error) {
-    core.error(error);
-    core.setFailed(error.message);
+    core.setFailed(`Pull request labeler error: ${error}\n\nStack:\n\n${error.stack}`);
   }
 }
 

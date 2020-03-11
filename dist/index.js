@@ -6227,8 +6227,7 @@ async function run() {
         }
     }
     catch (error) {
-        core.error(error);
-        core.setFailed(error.message);
+        core.setFailed(`Pull request labeler error: ${error}\n\nStack:\n\n${error.stack}`);
     }
 }
 // Returns true if we did an API call and added labels, false if we didn't. This
