@@ -49,7 +49,7 @@ async function run(): Promise<void> {
 
     for await (const response of client.paginate.iterator(opts)) {
       for (const pr of response) {
-        core.debug(`performing labeler at pr ${pr.number}`);
+        console.log(`performing labeler at pr ${pr.number}`);
         if (operationsLeft <= 0) {
           core.warning(
             `performed ${operationsPerRun} operations, exiting to avoid rate limit`
@@ -74,7 +74,12 @@ async function run(): Promise<void> {
       }
     }
   } catch (error) {
-    core.setFailed(`Pull request labeler error: ${error}\n\nStack:\n\n${error.stack}`);
+    console.error(
+      `Pull request labeler error: ${error}\n\nStack:\n\n${error.stack}`
+    );
+    core.setFailed(
+      `Pull request labeler error: ${error}\n\nStack:\n\n${error.stack}`
+    );
   }
 }
 
@@ -88,14 +93,14 @@ async function processPR(
   notFoundLabel: string
 ): Promise<boolean> {
   try {
-    core.debug(`fetching changed files for pr #${prNumber}`);
+    console.log(`fetching changed files for pr #${prNumber}`);
     const changedFiles: string[] = await getChangedFiles(client, prNumber);
 
     const labelsToAdd: string[] = [];
     for (const [label, globs] of labelGlobs.entries()) {
-      core.debug(`processing ${label}`);
+      console.log(`processing ${label}`);
       if (existingLabels.has(label)) {
-        core.debug(`pr #{prNumber} is already labeled "${label}"`);
+        console.log(`pr #{prNumber} is already labeled "${label}"`);
         continue;
       }
       if (checkGlobs(changedFiles, globs)) {
@@ -144,9 +149,9 @@ async function getChangedFiles(
 
   const changedFiles = listFilesResponse.data.map(f => f.filename);
 
-  core.debug("found changed files:");
+  console.log("found changed files:");
   for (const file of changedFiles) {
-    core.debug("  " + file);
+    console.log("  " + file);
   }
 
   return changedFiles;
@@ -201,12 +206,12 @@ function getLabelGlobMapFromObject(configObject: any): Map<string, string[]> {
 
 function checkGlobs(changedFiles: string[], globs: string[]): boolean {
   for (const glob of globs) {
-    core.debug(` checking pattern ${glob}`);
+    console.log(` checking pattern ${glob}`);
     const matcher = new Minimatch(glob);
     for (const changedFile of changedFiles) {
-      core.debug(` - ${changedFile}`);
+      console.log(` - ${changedFile}`);
       if (matcher.match(changedFile)) {
-        core.debug(` ${changedFile} matches`);
+        console.log(` ${changedFile} matches`);
         return true;
       }
     }
@@ -219,7 +224,7 @@ async function addLabels(
   prNumber: number,
   labels: string[]
 ) {
-  core.debug(
+  console.log(
     `adding labels to pr #{prNumber}: ${labels
       .map(l => '"' + l + '"')
       .join(", ")}`
