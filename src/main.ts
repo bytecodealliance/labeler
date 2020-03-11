@@ -8,19 +8,33 @@ async function run(): Promise<void> {
     const token = core.getInput('repo-token', {required: true});
     const configPath = core.getInput('configuration-path', {required: true});
     const notFoundLabel = core.getInput('not-found-label');
+
     const operationsPerRun = parseInt(
       core.getInput('operations-per-run', {required: true})
     );
+    if (operationsPerRun <= 0) {
+      throw new Error(`operations-per-run must be greater than zero, got ${operationsPerRun}`);
+    }
     let operationsLeft = operationsPerRun;
 
     const client = new github.GitHub(token);
 
-    const prNumber = getPrNumber();
-    if (prNumber) {
-      await processPR(client, prNumber, configPath, notFoundLabel);
+    const labelGlobs = await getLabelGlobs(
+      client,
+      configPath
+    );
+
+    // If we were triggered for a specific PR, then process it.
+    const thisPr = getThisPr();
+    if (thisPr) {
+      const { prNumber, existingLabels } = thisPr;
+      await processPR(client, prNumber, existingLabels, labelGlobs, notFoundLabel);
       return;
     }
 
+    // Otherwise, assume we are executing as a background cron job, finding
+    // unlabeled PRs and labeling them. This is effectively a workaround for
+    // https://github.com/actions/labeler/issues/12
     const opts = await client.pulls.list.endpoint.merge({
       owner: github.context.repo.owner,
       repo: github.context.repo.repo,
@@ -28,64 +42,65 @@ async function run(): Promise<void> {
       sort: 'updated'
     });
 
-    let prs = await client.paginate(opts);
-    prs = prs.filter(pr => {
-      const hasLabels = pr.labels && pr.labels.length > 0;
-      if (hasLabels) {
-        core.debug(
-          `pr ${pr.number} already has ${pr.labels.length} labels`
-        );
-      }
-      return !hasLabels;
-    });
+    for await (const response of client.paginate.iterator(opts)) {
+      for (const pr of response) {
+        core.debug(`performing labeler at pr ${pr.number}`);
+        if (operationsLeft <= 0) {
+          core.warning(
+            `performed ${operationsPerRun} operations, exiting to avoid rate limit`
+          );
+          return;
+        }
 
-    for (const pr of prs) {
-      core.debug(`performing labeler at pr ${pr.number}`);
-      if (operationsLeft <= 0) {
-        core.warning(
-          `performed ${operationsPerRun} operations, exiting to avoid rate limit`
-        );
-        return;
+        const existingLabels: Set<string> = new Set(...pr.labels.map(l => l.name));
+        if (await processPR(
+          client,
+          pr.number,
+          existingLabels,
+          labelGlobs,
+          notFoundLabel
+        )) {
+          operationsLeft -= 1;
+        }
       }
-
-      if (await processPR(client, pr.number, configPath, notFoundLabel)) {
-        operationsLeft -= 1;
-      }
-    };
+    }
   } catch (error) {
     core.error(error);
     core.setFailed(error.message);
   }
 }
 
+// Returns true if we did an API call and added labels, false if we didn't. This
+// is useful for avoiding API rate limiting.
 async function processPR(
   client: github.GitHub,
   prNumber: number,
-  configPath: string,
+  existingLabels: Set<string>,
+  labelGlobs: Map<string, string[]>,
   notFoundLabel: string
 ): Promise<boolean> {
   try {
     core.debug(`fetching changed files for pr #${prNumber}`);
     const changedFiles: string[] = await getChangedFiles(client, prNumber);
-    const labelGlobs: Map<string, string[]> = await getLabelGlobs(
-      client,
-      configPath
-    );
 
-    const labels: string[] = [];
+    const labelsToAdd: string[] = [];
     for (const [label, globs] of labelGlobs.entries()) {
       core.debug(`processing ${label}`);
+      if (existingLabels.has(label)) {
+        core.debug(`pr #{prNumber} is already labeled "${label}"`);
+        continue;
+      }
       if (checkGlobs(changedFiles, globs)) {
-        labels.push(label);
+        labelsToAdd.push(label);
       }
     }
 
-    if (notFoundLabel && labels.length === 0) {
-      labels.push(notFoundLabel);
+    if (notFoundLabel && labelsToAdd.length === 0) {
+      labelsToAdd.push(notFoundLabel);
     }
 
-    if (labels.length > 0) {
-      await addLabels(client, prNumber, labels);
+    if (labelsToAdd.length > 0) {
+      await addLabels(client, prNumber, labelsToAdd);
       return true;
     }
   } catch (error) {
@@ -95,13 +110,18 @@ async function processPR(
   return false;
 }
 
-function getPrNumber(): number | undefined {
+function getThisPr(): { prNumber: number, existingLabels: Set<string> } | undefined {
   const pullRequest = github.context.payload.pull_request;
   if (!pullRequest) {
     return undefined;
   }
 
-  return pullRequest.number;
+  return {
+    prNumber: pullRequest.number,
+    existingLabels: new Set(
+      ...pullRequest.labels(l => l.name)
+    ),
+  };
 }
 
 async function getChangedFiles(
@@ -191,6 +211,7 @@ async function addLabels(
   prNumber: number,
   labels: string[]
 ) {
+  core.debug(`adding labels to pr #{prNumber}: ${labels.map(l => '"' + l + '"').join(", ")}`);
   await client.issues.addLabels({
     owner: github.context.repo.owner,
     repo: github.context.repo.repo,
