@@ -6213,7 +6213,7 @@ async function run() {
             sort: "updated"
         });
         for await (const response of client.paginate.iterator(opts)) {
-            for (const pr of response) {
+            for (const pr of response.data) {
                 console.log(`performing labeler at pr ${pr.number}`);
                 if (operationsLeft <= 0) {
                     core.warning(`performed ${operationsPerRun} operations, exiting to avoid rate limit`);
