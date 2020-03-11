@@ -1,34 +1,39 @@
-import * as core from '@actions/core';
-import * as github from '@actions/github';
-import * as yaml from 'js-yaml';
-import {Minimatch} from 'minimatch';
+import * as core from "@actions/core";
+import * as github from "@actions/github";
+import * as yaml from "js-yaml";
+import { Minimatch } from "minimatch";
 
 async function run(): Promise<void> {
   try {
-    const token = core.getInput('repo-token', {required: true});
-    const configPath = core.getInput('configuration-path', {required: true});
-    const notFoundLabel = core.getInput('not-found-label');
+    const token = core.getInput("repo-token", { required: true });
+    const configPath = core.getInput("configuration-path", { required: true });
+    const notFoundLabel = core.getInput("not-found-label");
 
     const operationsPerRun = parseInt(
-      core.getInput('operations-per-run', {required: true})
+      core.getInput("operations-per-run", { required: true })
     );
     if (operationsPerRun <= 0) {
-      throw new Error(`operations-per-run must be greater than zero, got ${operationsPerRun}`);
+      throw new Error(
+        `operations-per-run must be greater than zero, got ${operationsPerRun}`
+      );
     }
     let operationsLeft = operationsPerRun;
 
     const client = new github.GitHub(token);
 
-    const labelGlobs = await getLabelGlobs(
-      client,
-      configPath
-    );
+    const labelGlobs = await getLabelGlobs(client, configPath);
 
     // If we were triggered for a specific PR, then process it.
     const thisPr = getThisPr();
     if (thisPr) {
       const { prNumber, existingLabels } = thisPr;
-      await processPR(client, prNumber, existingLabels, labelGlobs, notFoundLabel);
+      await processPR(
+        client,
+        prNumber,
+        existingLabels,
+        labelGlobs,
+        notFoundLabel
+      );
       return;
     }
 
@@ -38,8 +43,8 @@ async function run(): Promise<void> {
     const opts = await client.pulls.list.endpoint.merge({
       owner: github.context.repo.owner,
       repo: github.context.repo.repo,
-      state: 'open',
-      sort: 'updated'
+      state: "open",
+      sort: "updated"
     });
 
     for await (const response of client.paginate.iterator(opts)) {
@@ -52,14 +57,18 @@ async function run(): Promise<void> {
           return;
         }
 
-        const existingLabels: Set<string> = new Set(...pr.labels.map(l => l.name));
-        if (await processPR(
-          client,
-          pr.number,
-          existingLabels,
-          labelGlobs,
-          notFoundLabel
-        )) {
+        const existingLabels: Set<string> = new Set(
+          ...pr.labels.map(l => l.name)
+        );
+        if (
+          await processPR(
+            client,
+            pr.number,
+            existingLabels,
+            labelGlobs,
+            notFoundLabel
+          )
+        ) {
           operationsLeft -= 1;
         }
       }
@@ -110,7 +119,9 @@ async function processPR(
   return false;
 }
 
-function getThisPr(): { prNumber: number, existingLabels: Set<string> } | undefined {
+function getThisPr():
+  | { prNumber: number; existingLabels: Set<string> }
+  | undefined {
   const pullRequest = github.context.payload.pull_request;
   if (!pullRequest) {
     return undefined;
@@ -118,9 +129,7 @@ function getThisPr(): { prNumber: number, existingLabels: Set<string> } | undefi
 
   return {
     prNumber: pullRequest.number,
-    existingLabels: new Set(
-      ...pullRequest.labels(l => l.name)
-    ),
+    existingLabels: new Set(...pullRequest.labels(l => l.name))
   };
 }
 
@@ -136,9 +145,9 @@ async function getChangedFiles(
 
   const changedFiles = listFilesResponse.data.map(f => f.filename);
 
-  core.debug('found changed files:');
+  core.debug("found changed files:");
   for (const file of changedFiles) {
-    core.debug('  ' + file);
+    core.debug("  " + file);
   }
 
   return changedFiles;
@@ -177,7 +186,7 @@ async function fetchContent(
 function getLabelGlobMapFromObject(configObject: any): Map<string, string[]> {
   const labelGlobs: Map<string, string[]> = new Map();
   for (const label in configObject) {
-    if (typeof configObject[label] === 'string') {
+    if (typeof configObject[label] === "string") {
       labelGlobs.set(label, [configObject[label]]);
     } else if (configObject[label] instanceof Array) {
       labelGlobs.set(label, configObject[label]);
@@ -211,7 +220,11 @@ async function addLabels(
   prNumber: number,
   labels: string[]
 ) {
-  core.debug(`adding labels to pr #{prNumber}: ${labels.map(l => '"' + l + '"').join(", ")}`);
+  core.debug(
+    `adding labels to pr #{prNumber}: ${labels
+      .map(l => '"' + l + '"')
+      .join(", ")}`
+  );
   await client.issues.addLabels({
     owner: github.context.repo.owner,
     repo: github.context.repo.repo,
